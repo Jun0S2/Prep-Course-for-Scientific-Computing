@@ -5,6 +5,7 @@
 <base href="/hw/hw3/">
 <title>LU Factorization + Solve Ax=b Visualizer</title>
 <style>
+/* CSS는 동일하게 유지 */
 body { 
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
   padding: 20px; 
@@ -38,11 +39,13 @@ td {
   font-weight: bold; 
   position: relative;
 }
-.filled { background-color: #e8f5e9; }       /* 완료된 요소 */
-.updating { background-color: #ffeb3b; }    /* 현재 업데이트 중인 요소 */
-.pivot { background-color: #bbdefb; }       /* 피벗 요소 */
-.used { background-color: #e0e0e0; }        /* 계산에 사용된 요소 */
-td.empty { background-color: #fafafa; }     /* 아직 채우지 않음 */
+.filled { background-color: #e8f5e9; }
+.updating { background-color: #ffeb3b; }
+.pivot { background-color: #bbdefb; }
+.used { background-color: #e0e0e0; }
+.swapped { background-color: #ffcc80; }
+.pivot-candidate { background-color: #c8e6c9; }
+td.empty { background-color: #fafafa; }
 button { 
   margin: 5px; 
   padding: 10px 16px; 
@@ -104,17 +107,25 @@ button:hover {
   height: 20px;
   border: 1px solid #999;
 }
+.warning {
+  background-color: #ffebee;
+  border-left: 4px solid #f44336;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 4px;
+}
 </style>
 </head>
 <body>
 
-<button onclick="goHome()" style="margin-bottom: 20px;"> Home</button>
+<button onclick="goHome()" style="margin-bottom: 20px;">← Home</button>
 <h2>Step-by-Step LU Factorization + Solve Ax=b</h2>
 
 <!-- Main Screen -->
 <div id="mainScreen" class="screen" style="display:block;">
   <button onclick="startScreen('LU')">LU Factorization Only</button>
   <button onclick="startScreen('Solve')">Solve Ax=b</button>
+  <button onclick="startScreen('Pivoting')">LU with Pivoting</button>
 </div>
 
 <!-- LU Only Screen -->
@@ -196,27 +207,78 @@ button:hover {
   <div id="descSolve" class="desc"></div>
 </div>
 
+<!-- Pivoting Screen -->
+<div id="PivotingScreen" class="screen">
+  <h3>LU Factorization with Partial Pivoting</h3>
+  <label>N = <input type="number" id="matrixSizePivot" value="3" min="2" max="6"></label>
+  <button onclick="generatePivot()">Generate Matrix</button>
+  <button onclick="generateProblematicMatrix()">Generate Problematic Matrix</button>
+
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #bbdefb;"></div>
+      <span>Pivot Element</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #ffeb3b;"></div>
+      <span>Currently Updating</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #ffcc80;"></div>
+      <span>Row Swapped</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #c8e6c9;"></div>
+      <span>Pivot Candidate</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #e0e0e0;"></div>
+      <span>Used in Calculation</span>
+    </div>
+  </div>
+
+  <div class="flex-row">
+    <div class="matrix-container"><h4>Matrix A</h4><div id="matrixA_Pivot"></div></div>
+    <div class="matrix-container"><h4>Permutation P</h4><div id="matrixP_Pivot"></div></div>
+  </div>
+
+  <div class="flex-row">
+    <div class="matrix-container"><h4>Lower L</h4><div id="matrixL_Pivot"></div></div>
+    <div class="matrix-container"><h4>Upper U</h4><div id="matrixU_Pivot"></div></div>
+  </div>
+
+  <button onclick="nextStepPivot()">Next Step</button>
+  <div id="descPivot" class="desc"></div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.12.0/math.min.js"></script>
 <script>
-let N=3, A=[], L=[], U=[], b=[], y=[], x=[];
+let N=3, A=[], L=[], U=[], b=[], y=[], x=[], P=[];
 let step=0, phase='LU', currentCol=0, currentRow=1;
+let pivotPhase = 'findPivot';
+let originalA = []; // 원본 행렬 저장용 변수 추가
 
 // --- 홈으로 가는 함수 ---
 function goHome(){
-  // document.getElementById("LUScreen").style.display = 'none';
-  // document.getElementById("SolveScreen").style.display = 'none';
+  document.getElementById("LUScreen").style.display = 'none';
+  document.getElementById("SolveScreen").style.display = 'none';
+  document.getElementById("PivotingScreen").style.display = 'none';
   document.getElementById("mainScreen").style.display = 'block';
 }
 
 // --- 유틸 함수 ---
 function startScreen(opt){
   document.getElementById("mainScreen").style.display='none';
+  document.getElementById("LUScreen").style.display='none';
+  document.getElementById("SolveScreen").style.display='none';
+  document.getElementById("PivotingScreen").style.display='none';
+  
   if(opt==='LU') {
     document.getElementById("LUScreen").style.display='block';
-    document.getElementById("SolveScreen").style.display='none';
-  } else {
+  } else if(opt==='Solve') {
     document.getElementById("SolveScreen").style.display='block';
-    document.getElementById("LUScreen").style.display='none';
+  } else if(opt==='Pivoting') {
+    document.getElementById("PivotingScreen").style.display='block';
   }
 }
 
@@ -227,7 +289,7 @@ function format(val){
   return Number(num.toFixed(2));
 }
 
-function createTable(matrix, highlight=[], pivot=[], used=[], isVector=false){
+function createTable(matrix, highlight=[], pivot=[], used=[], swapped=[], candidates=[], isVector=false){
   let html="<table>";
   for(let i=0;i<matrix.length;i++){
     html+="<tr>";
@@ -235,8 +297,9 @@ function createTable(matrix, highlight=[], pivot=[], used=[], isVector=false){
       let val=matrix[i][j];
       let cls="empty";
       
-      // 우선순위: pivot > updating > used > filled > empty
-      if(pivot.some(p=>p[0]===i && p[1]===j)) cls="pivot";
+      if(swapped.some(p=>p[0]===i && p[1]===j)) cls="swapped";
+      else if(pivot.some(p=>p[0]===i && p[1]===j)) cls="pivot";
+      else if(candidates.some(p=>p[0]===i && p[1]===j)) cls="pivot-candidate";
       else if(highlight.some(p=>p[0]===i && p[1]===j)) cls="updating";
       else if(used.some(p=>p[0]===i && p[1]===j)) cls="used";
       else if(val!=='' && val!==0) cls="filled";
@@ -248,6 +311,246 @@ function createTable(matrix, highlight=[], pivot=[], used=[], isVector=false){
   }
   html+="</table>";
   return html;
+}
+
+// ================= Pivoting =================
+function generatePivot(){
+  N=parseInt(document.getElementById("matrixSizePivot").value);
+  initializePivot();
+  updateDisplayPivot();
+  document.getElementById("descPivot").innerHTML=
+    `<span class='title'>LU Factorization with Partial Pivoting</span>
+    We start with:
+    <div class="formula">PA = LU</div>
+    Where:
+    <ul>
+      <li>P is the permutation matrix (initially identity)</li>
+      <li>L is initialized as an identity matrix</li>
+      <li>U is initialized as a copy of A</li>
+    </ul>
+    <div class="warning">
+    <strong>Why Pivoting?</strong>
+    Without pivoting, we face:
+    <ul>
+      <li>Division by zero when pivot element is 0</li>
+      <li>Numerical instability when pivot is very small</li>
+      <li>Large rounding errors in calculations</li>
+    </ul>
+    </div>`;
+}
+
+function generateProblematicMatrix(){
+  N=parseInt(document.getElementById("matrixSizePivot").value);
+  initializePivot();
+  
+  // 문제있는 행렬 생성 (작은 피벗 또는 0 피벗)
+  if(N >= 2) {
+    U[0][0] = 0.001;
+    U[0][1] = 2;
+    U[1][0] = 1;
+    U[1][1] = 1;
+    
+    if(N >= 3) {
+      U[0][2] = 3;
+      U[1][2] = 4;
+      U[2][0] = 2;
+      U[2][1] = 3;
+      U[2][2] = 5;
+    }
+  }
+  
+  // A와 originalA 동일하게 업데이트
+  for(let i=0; i<N; i++) {
+    for(let j=0; j<N; j++) {
+      A[i][j] = U[i][j];
+      originalA[i][j] = U[i][j]; // originalA도 업데이트
+    }
+  }
+  
+  updateDisplayPivot();
+  document.getElementById("descPivot").innerHTML=
+    `<span class='title'>Problematic Matrix Generated</span>
+    This matrix demonstrates why pivoting is necessary:
+    <div class="warning">
+    <strong>Problem:</strong> The pivot element U[0,0] = ${U[0][0]} is very small.
+    This will cause:
+    <ul>
+      <li>Large multipliers in L matrix</li>
+      <li>Amplification of rounding errors</li>
+      <li>Potential numerical instability</li>
+    </ul>
+    </div>
+    Let's see how partial pivoting solves this issue!`;
+}
+
+function initializePivot(){
+  A=[]; L=[]; U=[]; P=[]; originalA=[]; // originalA 초기화 추가
+  step=0; currentCol=0; currentRow=1; 
+  pivotPhase = 'findPivot';
+  
+  // P를 단위행렬로 초기화
+  for(let i=0;i<N;i++){ 
+    P[i]=[];
+    for(let j=0;j<N;j++){
+      P[i][j] = (i===j ? 1 : 0);
+    }
+  }
+  
+  // A, L, U, originalA 초기화
+  for(let i=0;i<N;i++){ 
+    A[i]=[]; L[i]=[]; U[i]=[]; originalA[i]=[];
+    for(let j=0;j<N;j++){
+      let val=Math.floor(Math.random()*10)+1;
+      A[i][j]=val; U[i][j]=val; originalA[i][j]=val;
+      L[i][j]=(i===j?1:0);
+    }
+  }
+}
+
+function updateDisplayPivot(highlight=[], pivot=[], used=[], swapped=[], candidates=[]){
+  // A 대신 originalA를 사용하여 원본 행렬 표시
+  document.getElementById("matrixA_Pivot").innerHTML=createTable(originalA);
+  document.getElementById("matrixP_Pivot").innerHTML=createTable(P, highlight, pivot, used, swapped, candidates);
+  document.getElementById("matrixL_Pivot").innerHTML=createTable(L, highlight, pivot, used, swapped, candidates);
+  document.getElementById("matrixU_Pivot").innerHTML=createTable(U, highlight, pivot, used, swapped, candidates);
+}
+
+function nextStepPivot(){
+  if(currentCol>=N-1){ 
+    document.getElementById("descPivot").innerHTML=
+      `<span class='title'>LU Factorization with Pivoting Completed!</span>
+      We have successfully decomposed:
+      <div class="formula">PA = LU</div>
+      Where:
+      <ul>
+        <li>P is the permutation matrix that records row swaps</li>
+        <li>L is a lower triangular matrix with 1's on the diagonal</li>
+        <li>U is an upper triangular matrix</li>
+      </ul>
+      <div class="formula">
+      Key benefits of pivoting:
+      • Prevents division by zero
+      • Improves numerical stability
+      • Reduces rounding errors
+      </div>`;
+    return; 
+  }
+  
+  if(pivotPhase === 'findPivot') {
+    let maxRow = currentCol;
+    let maxVal = Math.abs(U[currentCol][currentCol]);
+    let candidates = [];
+    
+    for(let i=currentCol+1; i<N; i++) {
+      candidates.push([i, currentCol]);
+      if(Math.abs(U[i][currentCol]) > maxVal) {
+        maxVal = Math.abs(U[i][currentCol]);
+        maxRow = i;
+      }
+    }
+    
+    if(maxRow !== currentCol) {
+      pivotPhase = 'swapRows';
+      updateDisplayPivot([], [[maxRow, currentCol]], [], [], candidates);
+      document.getElementById("descPivot").innerHTML=
+        `<span class='title'>Step ${step+1}: Finding Pivot for Column ${currentCol}</span>
+        <strong>Pivot Search:</strong>
+        <div class="formula">Looking for maximum |U[i,${currentCol}]| where i ≥ ${currentCol}</div>
+        <strong>Current pivot candidate:</strong> U[${maxRow},${currentCol}] = ${format(U[maxRow][currentCol])}
+        <div class="warning">Need to swap row ${currentCol} with row ${maxRow} for better numerical stability!</div>`;
+    } else {
+      pivotPhase = 'eliminate';
+      updateDisplayPivot([], [[currentCol, currentCol]], [], [], candidates);
+      document.getElementById("descPivot").innerHTML=
+        `<span class='title'>Step ${step+1}: Pivot Found for Column ${currentCol}</span>
+        <strong>Pivot Search Complete:</strong>
+        <div class="formula">U[${currentCol},${currentCol}] = ${format(U[currentCol][currentCol])} is the largest in column ${currentCol}</div>
+        <strong>No row swap needed.</strong> Proceeding with elimination...`;
+    }
+    
+  } else if(pivotPhase === 'swapRows') {
+    let maxRow = currentCol;
+    let maxVal = Math.abs(U[currentCol][currentCol]);
+    for(let i=currentCol+1; i<N; i++) {
+      if(Math.abs(U[i][currentCol]) > maxVal) {
+        maxVal = Math.abs(U[i][currentCol]);
+        maxRow = i;
+      }
+    }
+    
+    if(maxRow !== currentCol) {
+      let temp = U[currentCol];
+      U[currentCol] = U[maxRow];
+      U[maxRow] = temp;
+      
+      for(let j=0; j<currentCol; j++) {
+        let tempL = L[currentCol][j];
+        L[currentCol][j] = L[maxRow][j];
+        L[maxRow][j] = tempL;
+      }
+      
+      let tempP = P[currentCol];
+      P[currentCol] = P[maxRow];
+      P[maxRow] = tempP;
+      
+      let swapped = [];
+      for(let j=0; j<N; j++) {
+        swapped.push([currentCol, j]);
+        swapped.push([maxRow, j]);
+      }
+      
+      updateDisplayPivot([], [], [], swapped, []);
+      document.getElementById("descPivot").innerHTML=
+        `<span class='title'>Step ${step+1}: Row Swap</span>
+        <strong>Swapped row ${currentCol} with row ${maxRow}</strong>
+        <div class="formula">
+        Reasons for swapping:
+        • New pivot: U[${currentCol},${currentCol}] = ${format(U[currentCol][currentCol])}
+        • Old pivot: U[${maxRow},${currentCol}] = ${format(U[maxRow][currentCol])}
+        • Better numerical stability with larger pivot
+        </div>
+        Updated permutation matrix P records this swap.`;
+    }
+    
+    pivotPhase = 'eliminate';
+    
+  } else if(pivotPhase === 'eliminate') {
+    let pivotElement = U[currentCol][currentCol];
+    let multiplier = U[currentRow][currentCol] / pivotElement;
+    
+    let highlight = [[currentRow, currentCol]];
+    let pivot = [[currentCol, currentCol]];
+    let used = [];
+    
+    for(let j=currentCol;j<N;j++){
+      U[currentRow][j] = U[currentRow][j] - multiplier * U[currentCol][j];
+      highlight.push([currentRow, j]);
+      if(j > currentCol) {
+        used.push([currentCol, j]);
+      }
+    }
+    
+    L[currentRow][currentCol] = multiplier;
+    
+    updateDisplayPivot(highlight, pivot, used);
+    
+    document.getElementById("descPivot").innerHTML=
+      `<span class='title'>Step ${step+1}: Elimination at (${currentRow}, ${currentCol})</span>
+      <strong>Pivot Element:</strong> U[${currentCol},${currentCol}] = ${format(pivotElement)}
+      <strong>Multiplier:</strong> 
+      <div class="formula">L[${currentRow},${currentCol}] = U[${currentRow},${currentCol}] / U[${currentCol},${currentCol}] = ${format(multiplier)}</div>
+      <strong>Update Row ${currentRow} of U:</strong>
+      <div class="formula">U[${currentRow},j] = U[${currentRow},j] - ${format(multiplier)} × U[${currentCol},j]</div>`;
+    
+    currentRow++;
+    if(currentRow>=N){ 
+      currentCol++; 
+      currentRow=currentCol+1; 
+      pivotPhase = 'findPivot';
+    }
+  }
+  
+  step++;
 }
 
 // ================= LU Only =================
@@ -299,36 +602,29 @@ function nextStepLU(){
   let pivotElement = U[currentCol][currentCol];
   let multiplier = U[currentRow][currentCol] / pivotElement;
   
-  // 강조 표시할 요소들
-  let highlight = [[currentRow, currentCol]];  // 현재 업데이트 중인 L 요소
-  let pivot = [[currentCol, currentCol]];      // 피벗 요소
-  let used = [];                               // 계산에 사용된 요소들
+  let highlight = [[currentRow, currentCol]];
+  let pivot = [[currentCol, currentCol]];
+  let used = [];
   
-  // U 행 업데이트
   for(let j=currentCol;j<N;j++){
     U[currentRow][j] = U[currentRow][j] - multiplier * U[currentCol][j];
-    highlight.push([currentRow, j]);  // U의 현재 행 업데이트 중인 요소
+    highlight.push([currentRow, j]);
     if(j > currentCol) {
-      used.push([currentCol, j]);     // U에서 사용된 요소
+      used.push([currentCol, j]);
     }
   }
   
-  // L에 승수 기록
   L[currentRow][currentCol] = multiplier;
   
   updateDisplayLU(highlight, pivot, used);
   
   document.getElementById("descLU").innerHTML=
     `<span class='title'>Step: Eliminating element at (${currentRow}, ${currentCol})</span>
-    
     <strong>Pivot Element:</strong> U[${currentCol},${currentCol}] = ${format(pivotElement)}
-    
     <strong>Multiplier:</strong> 
     <div class="formula">L[${currentRow},${currentCol}] = U[${currentRow},${currentCol}] / U[${currentCol},${currentCol}] = ${format(U[currentRow][currentCol] + multiplier * pivotElement)} / ${format(pivotElement)} = ${format(multiplier)}</div>
-    
     <strong>Update Row ${currentRow} of U:</strong>
     <div class="formula">U[${currentRow},j] = U[${currentRow},j] - ${format(multiplier)} × U[${currentCol},j] for j = ${currentCol} to ${N-1}</div>
-    
     This eliminates the element below the pivot in column ${currentCol}.`;
 
   currentRow++;
@@ -396,33 +692,27 @@ function nextStepSolve(){
     let pivotElement = U[currentCol][currentCol];
     let multiplier = U[currentRow][currentCol] / pivotElement;
     
-    // 강조 표시할 요소들
-    let highlight = [[currentRow, currentCol]];  // 현재 업데이트 중인 L 요소
-    let pivot = [[currentCol, currentCol]];      // 피벗 요소
-    let used = [];                               // 계산에 사용된 요소들
+    let highlight = [[currentRow, currentCol]];
+    let pivot = [[currentCol, currentCol]];
+    let used = [];
     
-    // U 행 업데이트
     for(let j=currentCol;j<N;j++){
       U[currentRow][j] = U[currentRow][j] - multiplier * U[currentCol][j];
-      highlight.push([currentRow, j]);  // U의 현재 행 업데이트 중인 요소
+      highlight.push([currentRow, j]);
       if(j > currentCol) {
-        used.push([currentCol, j]);     // U에서 사용된 요소
+        used.push([currentCol, j]);
       }
     }
     
-    // L에 승수 기록
     L[currentRow][currentCol] = multiplier;
     
     updateDisplaySolve(highlight, pivot, used);
     
     document.getElementById("descSolve").innerHTML=
       `<span class='title'>LU Factorization: Eliminating element at (${currentRow}, ${currentCol})</span>
-      
       <strong>Pivot Element:</strong> U[${currentCol},${currentCol}] = ${format(pivotElement)}
-      
       <strong>Multiplier:</strong> 
       <div class="formula">L[${currentRow},${currentCol}] = U[${currentRow},${currentCol}] / U[${currentCol},${currentCol}] = ${format(U[currentRow][currentCol] + multiplier * pivotElement)} / ${format(pivotElement)} = ${format(multiplier)}</div>
-      
       <strong>Update Row ${currentRow} of U:</strong>
       <div class="formula">U[${currentRow},j] = U[${currentRow},j] - ${format(multiplier)} × U[${currentCol},j] for j = ${currentCol} to ${N-1}</div>`;
     
@@ -450,7 +740,7 @@ function nextStepSolve(){
     let used = [];
     for(let j=0;j<step;j++) {
       sum += L[step][j] * y[j][0];
-      used.push([step, j]);  // L에서 사용된 요소
+      used.push([step, j]);
     }
     
     y[step][0] = b[step][0] - sum;
@@ -459,13 +749,10 @@ function nextStepSolve(){
     
     document.getElementById("descSolve").innerHTML=
       `<span class='title'>Forward Substitution: Solving for y[${step}]</span>
-      
       <strong>Equation:</strong>
       <div class="formula">L[${step},${step}] × y[${step}] = b[${step}] - Σ(L[${step},j] × y[j]) for j = 0 to ${step-1}</div>
-      
       <strong>Calculation:</strong>
       <div class="formula">y[${step}] = (${format(b[step][0])} - ${format(sum)}) / ${format(L[step][step])} = ${format(y[step][0])}</div>
-      
       Since L[${step},${step}] = 1, we get y[${step}] = ${format(y[step][0])}`;
     
     step++;
@@ -488,7 +775,7 @@ function nextStepSolve(){
     
     for(let j=i+1;j<N;j++) {
       sum += U[i][j] * x[j][0];
-      used.push([i, j]);  // U에서 사용된 요소
+      used.push([i, j]);
     }
     
     x[i][0] = (y[i][0] - sum) / U[i][i];
@@ -497,10 +784,8 @@ function nextStepSolve(){
     
     document.getElementById("descSolve").innerHTML=
       `<span class='title'>Backward Substitution: Solving for x[${i}]</span>
-      
       <strong>Equation:</strong>
       <div class="formula">U[${i},${i}] × x[${i}] = y[${i}] - Σ(U[${i},j] × x[j]) for j = ${i+1} to ${N-1}</div>
-      
       <strong>Calculation:</strong>
       <div class="formula">x[${i}] = (${format(y[i][0])} - ${format(sum)}) / ${format(U[i][i])} = ${format(x[i][0])}</div>`;
     
