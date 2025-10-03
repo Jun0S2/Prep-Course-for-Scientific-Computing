@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LU Factorization + Solve Ax=b Visualizer</title>
+<style>
+body { 
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+  padding: 20px; 
+  background: #f0f2f5; 
+  color: #333;
+}
+.screen { display: none; }
+.flex-row { 
+  display: flex; 
+  gap: 20px; 
+  margin-bottom: 20px; 
+  align-items: flex-start; 
+  flex-wrap: wrap;
+}
+.matrix-container {
+  background: white;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+table { 
+  border-collapse: collapse; 
+  margin: 0 auto;
+}
+td { 
+  border: 1px solid #bbb; 
+  width: 60px; 
+  height: 60px; 
+  text-align: center; 
+  font-size: 20px; 
+  font-weight: bold; 
+  position: relative;
+}
+.filled { background-color: #e8f5e9; }       /* 완료된 요소 */
+.updating { background-color: #ffeb3b; }    /* 현재 업데이트 중인 요소 */
+.pivot { background-color: #bbdefb; }       /* 피벗 요소 */
+.used { background-color: #e0e0e0; }        /* 계산에 사용된 요소 */
+td.empty { background-color: #fafafa; }     /* 아직 채우지 않음 */
+button { 
+  margin: 5px; 
+  padding: 10px 16px; 
+  font-size: 18px; 
+  cursor: pointer; 
+  background: #4a6fa5;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  transition: background 0.3s;
+}
+button:hover {
+  background: #3a5980;
+}
+.desc { 
+  margin-top: 15px; 
+  font-size: 18px; 
+  color: #333; 
+  background: #fff; 
+  padding: 15px; 
+  border-radius: 5px; 
+  white-space: pre-line;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  line-height: 1.5;
+}
+.desc .title { 
+  font-size: 20px; 
+  font-weight: bold; 
+  margin-bottom: 10px; 
+  display: block;
+  color: #2c3e50;
+}
+.formula {
+  font-family: 'Cambria Math', serif;
+  background: #f8f9fa;
+  padding: 10px;
+  border-radius: 4px;
+  margin: 10px 0;
+  border-left: 4px solid #4a6fa5;
+}
+.highlight {
+  background-color: #fff9c4;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+.legend {
+  display: flex;
+  gap: 15px;
+  margin: 15px 0;
+  flex-wrap: wrap;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.legend-color {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #999;
+}
+</style>
+</head>
+<body>
+
+<button onclick="goHome()" style="margin-bottom: 20px;"> Home</button>
+<h2>Step-by-Step LU Factorization + Solve Ax=b</h2>
+
+<!-- Main Screen -->
+<div id="mainScreen" class="screen" style="display:block;">
+  <button onclick="startScreen('LU')">LU Factorization Only</button>
+  <button onclick="startScreen('Solve')">Solve Ax=b</button>
+</div>
+
+<!-- LU Only Screen -->
+<div id="LUScreen" class="screen">
+  <h3>LU Factorization Step-by-Step</h3>
+  <label>N = <input type="number" id="matrixSizeLU" value="3" min="2" max="6"></label>
+  <button onclick="generateLU()">Generate Matrix</button>
+  
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #bbdefb;"></div>
+      <span>Pivot Element</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #ffeb3b;"></div>
+      <span>Currently Updating</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #e8f5e9;"></div>
+      <span>Completed</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #e0e0e0;"></div>
+      <span>Used in Calculation</span>
+    </div>
+  </div>
+  
+  <div class="flex-row">
+    <div class="matrix-container"><h4>Matrix A</h4><div id="matrixA_LU"></div></div>
+    <div class="matrix-container"><h4>Lower L</h4><div id="matrixL_LU"></div></div>
+    <div class="matrix-container"><h4>Upper U</h4><div id="matrixU_LU"></div></div>
+  </div>
+  
+  <button onclick="nextStepLU()">Next Step</button>
+  <div id="descLU" class="desc"></div>
+</div>
+
+<!-- Solve Ax=b Screen -->
+<div id="SolveScreen" class="screen">
+  <h3>LU Factorization + Solve Ax=b</h3>
+  <label>N = <input type="number" id="matrixSizeSolve" value="3" min="2" max="6"></label>
+  <button onclick="generateSolve()">Generate Matrix & b</button>
+
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #bbdefb;"></div>
+      <span>Pivot Element</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #ffeb3b;"></div>
+      <span>Currently Updating</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #e8f5e9;"></div>
+      <span>Completed</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #e0e0e0;"></div>
+      <span>Used in Calculation</span>
+    </div>
+  </div>
+
+  <div class="flex-row">
+    <div class="matrix-container"><h4>Matrix A</h4><div id="matrixA_Solve"></div></div>
+    <div class="matrix-container"><h4>Vector b</h4><div id="vectorB_Solve"></div></div>
+  </div>
+
+  <div class="flex-row">
+    <div class="matrix-container"><h4>Lower L</h4><div id="matrixL_Solve"></div></div>
+    <div class="matrix-container"><h4>Upper U</h4><div id="matrixU_Solve"></div></div>
+  </div>
+
+  <div class="flex-row">
+    <div class="matrix-container"><h4>Vector y (Ly=b)</h4><div id="vectorY_Solve"></div></div>
+    <div class="matrix-container"><h4>Vector x (Ux=y)</h4><div id="vectorX_Solve"></div></div>
+  </div>
+
+  <button onclick="nextStepSolve()">Next Step</button>
+  <div id="descSolve" class="desc"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.12.0/math.min.js"></script>
+<script>
+let N=3, A=[], L=[], U=[], b=[], y=[], x=[];
+let step=0, phase='LU', currentCol=0, currentRow=1;
+
+// --- 홈으로 가는 함수 ---
+function goHome(){
+  // document.getElementById("LUScreen").style.display = 'none';
+  // document.getElementById("SolveScreen").style.display = 'none';
+  document.getElementById("mainScreen").style.display = 'block';
+}
+
+// --- 유틸 함수 ---
+function startScreen(opt){
+  document.getElementById("mainScreen").style.display='none';
+  if(opt==='LU') {
+    document.getElementById("LUScreen").style.display='block';
+    document.getElementById("SolveScreen").style.display='none';
+  } else {
+    document.getElementById("SolveScreen").style.display='block';
+    document.getElementById("LUScreen").style.display='none';
+  }
+}
+
+function format(val){
+  if(val === '' || val === null) return '';
+  let num = Number(val);
+  if(Math.abs(num) < 1e-12) return 0;
+  return Number(num.toFixed(2));
+}
+
+function createTable(matrix, highlight=[], pivot=[], used=[], isVector=false){
+  let html="<table>";
+  for(let i=0;i<matrix.length;i++){
+    html+="<tr>";
+    for(let j=0;j<(isVector?1:matrix[i].length);j++){
+      let val=matrix[i][j];
+      let cls="empty";
+      
+      // 우선순위: pivot > updating > used > filled > empty
+      if(pivot.some(p=>p[0]===i && p[1]===j)) cls="pivot";
+      else if(highlight.some(p=>p[0]===i && p[1]===j)) cls="updating";
+      else if(used.some(p=>p[0]===i && p[1]===j)) cls="used";
+      else if(val!=='' && val!==0) cls="filled";
+      else if(val===1 && !isVector) cls="filled";
+      
+      html+=`<td class="${cls}">${format(val)}</td>`;
+    }
+    html+="</tr>";
+  }
+  html+="</table>";
+  return html;
+}
+
+// ================= LU Only =================
+function generateLU(){
+  N=parseInt(document.getElementById("matrixSizeLU").value);
+  A=[]; L=[]; U=[]; step=0; currentCol=0; currentRow=1; phase='LU';
+  for(let i=0;i<N;i++){ 
+    A[i]=[]; L[i]=[]; U[i]=[];
+    for(let j=0;j<N;j++){
+      let val=Math.floor(Math.random()*10)+1;
+      A[i][j]=val; U[i][j]=val;
+      L[i][j]=(i===j?1:0);
+    }
+  }
+  updateDisplayLU();
+  document.getElementById("descLU").innerHTML=
+    `<span class='title'>Initialization</span>
+    We start with:
+    <div class="formula">A = L × U</div>
+    Where:
+    <ul>
+      <li>L is initialized as an identity matrix (diagonal elements = 1)</li>
+      <li>U is initialized as a copy of A</li>
+    </ul>
+    We will perform Gaussian elimination to transform U into an upper triangular matrix while recording the multipliers in L.`;
+}
+
+function updateDisplayLU(highlight=[], pivot=[], used=[]){
+  document.getElementById("matrixA_LU").innerHTML=createTable(A);
+  document.getElementById("matrixL_LU").innerHTML=createTable(L, highlight, pivot, used);
+  document.getElementById("matrixU_LU").innerHTML=createTable(U, highlight, pivot, used);
+}
+
+function nextStepLU(){
+  if(currentCol>=N-1){ 
+    document.getElementById("descLU").innerHTML=
+      `<span class='title'>LU Factorization Completed!</span>
+      We have successfully decomposed A into L and U:
+      <div class="formula">A = L × U</div>
+      Where:
+      <ul>
+        <li>L is a lower triangular matrix with 1's on the diagonal</li>
+        <li>U is an upper triangular matrix</li>
+      </ul>
+      You can verify this by multiplying L and U to get back the original matrix A.`;
+    return; 
+  }
+  
+  let pivotElement = U[currentCol][currentCol];
+  let multiplier = U[currentRow][currentCol] / pivotElement;
+  
+  // 강조 표시할 요소들
+  let highlight = [[currentRow, currentCol]];  // 현재 업데이트 중인 L 요소
+  let pivot = [[currentCol, currentCol]];      // 피벗 요소
+  let used = [];                               // 계산에 사용된 요소들
+  
+  // U 행 업데이트
+  for(let j=currentCol;j<N;j++){
+    U[currentRow][j] = U[currentRow][j] - multiplier * U[currentCol][j];
+    highlight.push([currentRow, j]);  // U의 현재 행 업데이트 중인 요소
+    if(j > currentCol) {
+      used.push([currentCol, j]);     // U에서 사용된 요소
+    }
+  }
+  
+  // L에 승수 기록
+  L[currentRow][currentCol] = multiplier;
+  
+  updateDisplayLU(highlight, pivot, used);
+  
+  document.getElementById("descLU").innerHTML=
+    `<span class='title'>Step: Eliminating element at (${currentRow}, ${currentCol})</span>
+    
+    <strong>Pivot Element:</strong> U[${currentCol},${currentCol}] = ${format(pivotElement)}
+    
+    <strong>Multiplier:</strong> 
+    <div class="formula">L[${currentRow},${currentCol}] = U[${currentRow},${currentCol}] / U[${currentCol},${currentCol}] = ${format(U[currentRow][currentCol] + multiplier * pivotElement)} / ${format(pivotElement)} = ${format(multiplier)}</div>
+    
+    <strong>Update Row ${currentRow} of U:</strong>
+    <div class="formula">U[${currentRow},j] = U[${currentRow},j] - ${format(multiplier)} × U[${currentCol},j] for j = ${currentCol} to ${N-1}</div>
+    
+    This eliminates the element below the pivot in column ${currentCol}.`;
+
+  currentRow++;
+  if(currentRow>=N){ 
+    currentCol++; 
+    currentRow=currentCol+1; 
+  }
+}
+
+// ================= Solve Ax=b =================
+function generateSolve(){
+  N=parseInt(document.getElementById("matrixSizeSolve").value);
+  A=[]; L=[]; U=[]; b=[]; y=Array(N).fill(['']); x=Array(N).fill(['']);
+  step=0; phase='LU'; currentCol=0; currentRow=1;
+  for(let i=0;i<N;i++){ 
+    A[i]=[]; L[i]=[]; U[i]=[]; 
+    b[i]=[Math.floor(Math.random()*10)+1];
+    for(let j=0;j<N;j++){
+      let val=Math.floor(Math.random()*10)+1;
+      A[i][j]=val; U[i][j]=val;
+      L[i][j]=(i===j?1:0);
+    }
+  }
+  updateDisplaySolve();
+  document.getElementById("descSolve").innerHTML=
+    `<span class='title'>Initialization</span>
+    We want to solve the system:
+    <div class="formula">A × x = b</div>
+    Using LU factorization:
+    <div class="formula">A = L × U</div>
+    So the system becomes:
+    <div class="formula">L × U × x = b</div>
+    We'll solve this in two steps:
+    <ol>
+      <li>Forward substitution: Solve L × y = b for y</li>
+      <li>Backward substitution: Solve U × x = y for x</li>
+    </ol>
+    First, we need to factor A into L and U.`;
+}
+
+function updateDisplaySolve(highlight=[], pivot=[], used=[]){
+  document.getElementById("matrixA_Solve").innerHTML=createTable(A);
+  document.getElementById("matrixL_Solve").innerHTML=createTable(L, highlight, pivot, used);
+  document.getElementById("matrixU_Solve").innerHTML=createTable(U, highlight, pivot, used);
+  document.getElementById("vectorB_Solve").innerHTML=createTable(b, [], [], [], true);
+  document.getElementById("vectorY_Solve").innerHTML=createTable(y, highlight, [], [], true);
+  document.getElementById("vectorX_Solve").innerHTML=createTable(x, highlight, [], [], true);
+}
+
+function nextStepSolve(){
+  if(phase==='LU'){
+    if(currentCol>=N-1){ 
+      phase='Forward'; 
+      step=0; 
+      document.getElementById("descSolve").innerHTML=
+        `<span class='title'>LU Factorization Completed</span>
+        We now have:
+        <div class="formula">A = L × U</div>
+        Next, we'll solve the system using forward substitution:
+        <div class="formula">L × y = b</div>
+        Since L is lower triangular, we can solve for y from top to bottom.`;
+      return; 
+    }
+    
+    let pivotElement = U[currentCol][currentCol];
+    let multiplier = U[currentRow][currentCol] / pivotElement;
+    
+    // 강조 표시할 요소들
+    let highlight = [[currentRow, currentCol]];  // 현재 업데이트 중인 L 요소
+    let pivot = [[currentCol, currentCol]];      // 피벗 요소
+    let used = [];                               // 계산에 사용된 요소들
+    
+    // U 행 업데이트
+    for(let j=currentCol;j<N;j++){
+      U[currentRow][j] = U[currentRow][j] - multiplier * U[currentCol][j];
+      highlight.push([currentRow, j]);  // U의 현재 행 업데이트 중인 요소
+      if(j > currentCol) {
+        used.push([currentCol, j]);     // U에서 사용된 요소
+      }
+    }
+    
+    // L에 승수 기록
+    L[currentRow][currentCol] = multiplier;
+    
+    updateDisplaySolve(highlight, pivot, used);
+    
+    document.getElementById("descSolve").innerHTML=
+      `<span class='title'>LU Factorization: Eliminating element at (${currentRow}, ${currentCol})</span>
+      
+      <strong>Pivot Element:</strong> U[${currentCol},${currentCol}] = ${format(pivotElement)}
+      
+      <strong>Multiplier:</strong> 
+      <div class="formula">L[${currentRow},${currentCol}] = U[${currentRow},${currentCol}] / U[${currentCol},${currentCol}] = ${format(U[currentRow][currentCol] + multiplier * pivotElement)} / ${format(pivotElement)} = ${format(multiplier)}</div>
+      
+      <strong>Update Row ${currentRow} of U:</strong>
+      <div class="formula">U[${currentRow},j] = U[${currentRow},j] - ${format(multiplier)} × U[${currentCol},j] for j = ${currentCol} to ${N-1}</div>`;
+    
+    currentRow++; 
+    if(currentRow>=N){ 
+      currentCol++; 
+      currentRow=currentCol+1; 
+    }
+  }
+  else if(phase==='Forward'){
+    if(step>=N){ 
+      phase='Backward'; 
+      step=0; 
+      document.getElementById("descSolve").innerHTML=
+        `<span class='title'>Forward Substitution Completed</span>
+        We now have the vector y:
+        <div class="formula">L × y = b</div>
+        Next, we'll solve the system using backward substitution:
+        <div class="formula">U × x = y</div>
+        Since U is upper triangular, we can solve for x from bottom to top.`;
+      return; 
+    }
+    
+    let sum=0;
+    let used = [];
+    for(let j=0;j<step;j++) {
+      sum += L[step][j] * y[j][0];
+      used.push([step, j]);  // L에서 사용된 요소
+    }
+    
+    y[step][0] = b[step][0] - sum;
+    
+    updateDisplaySolve([[step, 0]], [], used);
+    
+    document.getElementById("descSolve").innerHTML=
+      `<span class='title'>Forward Substitution: Solving for y[${step}]</span>
+      
+      <strong>Equation:</strong>
+      <div class="formula">L[${step},${step}] × y[${step}] = b[${step}] - Σ(L[${step},j] × y[j]) for j = 0 to ${step-1}</div>
+      
+      <strong>Calculation:</strong>
+      <div class="formula">y[${step}] = (${format(b[step][0])} - ${format(sum)}) / ${format(L[step][step])} = ${format(y[step][0])}</div>
+      
+      Since L[${step},${step}] = 1, we get y[${step}] = ${format(y[step][0])}`;
+    
+    step++;
+  }
+  else if(phase==='Backward'){
+    if(step>=N){ 
+      document.getElementById("descSolve").innerHTML=
+        `<span class='title'>Solution Complete!</span>
+        We have successfully solved the system:
+        <div class="formula">A × x = b</div>
+        The solution vector x is:
+        <div class="formula">x = [${x.map(v => format(v[0])).join(', ')}]</div>
+        You can verify this solution by multiplying A by x and checking if it equals b.`;
+      return; 
+    }
+    
+    let i = N-1-step;
+    let sum = 0;
+    let used = [];
+    
+    for(let j=i+1;j<N;j++) {
+      sum += U[i][j] * x[j][0];
+      used.push([i, j]);  // U에서 사용된 요소
+    }
+    
+    x[i][0] = (y[i][0] - sum) / U[i][i];
+    
+    updateDisplaySolve([[i, 0]], [[i, i]], used);
+    
+    document.getElementById("descSolve").innerHTML=
+      `<span class='title'>Backward Substitution: Solving for x[${i}]</span>
+      
+      <strong>Equation:</strong>
+      <div class="formula">U[${i},${i}] × x[${i}] = y[${i}] - Σ(U[${i},j] × x[j]) for j = ${i+1} to ${N-1}</div>
+      
+      <strong>Calculation:</strong>
+      <div class="formula">x[${i}] = (${format(y[i][0])} - ${format(sum)}) / ${format(U[i][i])} = ${format(x[i][0])}</div>`;
+    
+    step++;
+  }
+}
+</script>
+</body>
+</html>
