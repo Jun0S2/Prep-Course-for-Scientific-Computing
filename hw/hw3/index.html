@@ -288,27 +288,46 @@ function format(val){
   if(Math.abs(num) < 1e-12) return 0;
   return Number(num.toFixed(2));
 }
-
+// ==== create table
 function createTable(matrix, highlight=[], pivot=[], used=[], swapped=[], candidates=[], isVector=false){
   let html="<table>";
-  for(let i=0;i<matrix.length;i++){
-    html+="<tr>";
-    for(let j=0;j<(isVector?1:matrix[i].length);j++){
-      let val=matrix[i][j];
+  
+  if (isVector) {
+    // 벡터인 경우 (1차원 배열)
+    for(let i=0;i<matrix.length;i++){
+      html+="<tr>";
+      let val = matrix[i];
       let cls="empty";
       
-      if(swapped.some(p=>p[0]===i && p[1]===j)) cls="swapped";
-      else if(pivot.some(p=>p[0]===i && p[1]===j)) cls="pivot";
-      else if(candidates.some(p=>p[0]===i && p[1]===j)) cls="pivot-candidate";
-      else if(highlight.some(p=>p[0]===i && p[1]===j)) cls="updating";
-      else if(used.some(p=>p[0]===i && p[1]===j)) cls="used";
+      // 하이라이트 확인 (벡터는 [i, 0] 형식으로 표시)
+      if(highlight.some(p=>p[0]===i && p[1]===0)) cls="updating";
       else if(val!=='' && val!==0) cls="filled";
-      else if(val===1 && !isVector) cls="filled";
       
       html+=`<td class="${cls}">${format(val)}</td>`;
+      html+="</tr>";
     }
-    html+="</tr>";
+  } else {
+    // 행렬인 경우 (2차원 배열)
+    for(let i=0;i<matrix.length;i++){
+      html+="<tr>";
+      for(let j=0;j<matrix[i].length;j++){
+        let val=matrix[i][j];
+        let cls="empty";
+        
+        if(swapped.some(p=>p[0]===i && p[1]===j)) cls="swapped";
+        else if(pivot.some(p=>p[0]===i && p[1]===j)) cls="pivot";
+        else if(candidates.some(p=>p[0]===i && p[1]===j)) cls="pivot-candidate";
+        else if(highlight.some(p=>p[0]===i && p[1]===j)) cls="updating";
+        else if(used.some(p=>p[0]===i && p[1]===j)) cls="used";
+        else if(val!=='' && val!==0) cls="filled";
+        else if(val===1) cls="filled";
+        
+        html+=`<td class="${cls}">${format(val)}</td>`;
+      }
+      html+="</tr>";
+    }
   }
+  
   html+="</table>";
   return html;
 }
@@ -633,21 +652,26 @@ function nextStepLU(){
     currentRow=currentCol+1; 
   }
 }
-
 // ================= Solve Ax=b =================
 function generateSolve(){
   N=parseInt(document.getElementById("matrixSizeSolve").value);
-  A=[]; L=[]; U=[]; b=[]; y=Array(N).fill(['']); x=Array(N).fill(['']);
+  A=[]; L=[]; U=[]; 
+  b=Array(N).fill(0); 
+  y=Array(N).fill(0); 
+  x=Array(N).fill(0);
   step=0; phase='LU'; currentCol=0; currentRow=1;
+  
   for(let i=0;i<N;i++){ 
     A[i]=[]; L[i]=[]; U[i]=[]; 
-    b[i]=[Math.floor(Math.random()*10)+1];
+    b[i]=Math.floor(Math.random()*10)+1;
+    
     for(let j=0;j<N;j++){
       let val=Math.floor(Math.random()*10)+1;
       A[i][j]=val; U[i][j]=val;
       L[i][j]=(i===j?1:0);
     }
   }
+  
   updateDisplaySolve();
   document.getElementById("descSolve").innerHTML=
     `<span class='title'>Initialization</span>
@@ -669,9 +693,11 @@ function updateDisplaySolve(highlight=[], pivot=[], used=[]){
   document.getElementById("matrixA_Solve").innerHTML=createTable(A);
   document.getElementById("matrixL_Solve").innerHTML=createTable(L, highlight, pivot, used);
   document.getElementById("matrixU_Solve").innerHTML=createTable(U, highlight, pivot, used);
-  document.getElementById("vectorB_Solve").innerHTML=createTable(b, [], [], [], true);
-  document.getElementById("vectorY_Solve").innerHTML=createTable(y, highlight, [], [], true);
-  document.getElementById("vectorX_Solve").innerHTML=createTable(x, highlight, [], [], true);
+  
+  // 벡터들 표시 (isVector=true로 설정)
+  document.getElementById("vectorB_Solve").innerHTML=createTable(b, [], [], [], false, [], true);
+  document.getElementById("vectorY_Solve").innerHTML=createTable(y, highlight, [], [], false, [], true);
+  document.getElementById("vectorX_Solve").innerHTML=createTable(x, highlight, [], [], false, [], true);
 }
 
 function nextStepSolve(){
@@ -739,21 +765,27 @@ function nextStepSolve(){
     let sum=0;
     let used = [];
     for(let j=0;j<step;j++) {
-      sum += L[step][j] * y[j][0];
+      sum += L[step][j] * y[j];
       used.push([step, j]);
     }
     
-    y[step][0] = b[step][0] - sum;
+    y[step] = (b[step] - sum) / L[step][step];
     
-    updateDisplaySolve([[step, 0]], [], used);
+    // 벡터 y의 현재 요소를 하이라이트 (벡터는 [i, 0] 형식)
+    let vectorHighlight = [];
+    for(let i=0; i<=step; i++) {
+      vectorHighlight.push([i, 0]);
+    }
+    
+    updateDisplaySolve(vectorHighlight, [], used);
     
     document.getElementById("descSolve").innerHTML=
       `<span class='title'>Forward Substitution: Solving for y[${step}]</span>
       <strong>Equation:</strong>
       <div class="formula">L[${step},${step}] × y[${step}] = b[${step}] - Σ(L[${step},j] × y[j]) for j = 0 to ${step-1}</div>
       <strong>Calculation:</strong>
-      <div class="formula">y[${step}] = (${format(b[step][0])} - ${format(sum)}) / ${format(L[step][step])} = ${format(y[step][0])}</div>
-      Since L[${step},${step}] = 1, we get y[${step}] = ${format(y[step][0])}`;
+      <div class="formula">y[${step}] = (${format(b[step])} - ${format(sum)}) / ${format(L[step][step])} = ${format(y[step])}</div>
+      Since L[${step},${step}] = 1, we get y[${step}] = ${format(y[step])}`;
     
     step++;
   }
@@ -764,7 +796,7 @@ function nextStepSolve(){
         We have successfully solved the system:
         <div class="formula">A × x = b</div>
         The solution vector x is:
-        <div class="formula">x = [${x.map(v => format(v[0])).join(', ')}]</div>
+        <div class="formula">x = [${x.map(v => format(v)).join(', ')}]</div>
         You can verify this solution by multiplying A by x and checking if it equals b.`;
       return; 
     }
@@ -774,20 +806,26 @@ function nextStepSolve(){
     let used = [];
     
     for(let j=i+1;j<N;j++) {
-      sum += U[i][j] * x[j][0];
+      sum += U[i][j] * x[j];
       used.push([i, j]);
     }
     
-    x[i][0] = (y[i][0] - sum) / U[i][i];
+    x[i] = (y[i] - sum) / U[i][i];
     
-    updateDisplaySolve([[i, 0]], [[i, i]], used);
+    // 벡터 x의 현재 요소를 하이라이트 (벡터는 [i, 0] 형식)
+    let vectorHighlight = [];
+    for(let k=N-1; k>=i; k--) {
+      vectorHighlight.push([k, 0]);
+    }
+    
+    updateDisplaySolve(vectorHighlight, [[i, i]], used);
     
     document.getElementById("descSolve").innerHTML=
       `<span class='title'>Backward Substitution: Solving for x[${i}]</span>
       <strong>Equation:</strong>
       <div class="formula">U[${i},${i}] × x[${i}] = y[${i}] - Σ(U[${i},j] × x[j]) for j = ${i+1} to ${N-1}</div>
       <strong>Calculation:</strong>
-      <div class="formula">x[${i}] = (${format(y[i][0])} - ${format(sum)}) / ${format(U[i][i])} = ${format(x[i][0])}</div>`;
+      <div class="formula">x[${i}] = (${format(y[i])} - ${format(sum)}) / ${format(U[i][i])} = ${format(x[i])}</div>`;
     
     step++;
   }
