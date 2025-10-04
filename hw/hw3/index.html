@@ -5,7 +5,7 @@
 <base href="/hw/hw3/">
 <title>LU Factorization + Solve Ax=b Visualizer</title>
 <style>
-/* CSS는 동일하게 유지 */
+/* CSS 스타일 - 행렬 시각화를 위한 색상 및 레이아웃 정의 */
 body { 
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
   padding: 20px; 
@@ -39,13 +39,15 @@ td {
   font-weight: bold; 
   position: relative;
 }
-.filled { background-color: #e8f5e9; }
-.updating { background-color: #ffeb3b; }
-.pivot { background-color: #bbdefb; }
-.used { background-color: #e0e0e0; }
-.swapped { background-color: #ffcc80; }
-.pivot-candidate { background-color: #c8e6c9; }
-td.empty { background-color: #fafafa; }
+/* 행렬 요소 상태별 색상 클래스 */
+.filled { background-color: #e8f5e9; } /* 계산 완료된 요소 */
+.updating { background-color: #ffeb3b; } /* 현재 계산 중인 요소 */
+.pivot { background-color: #bbdefb; } /* 피벗 요소 */
+.used { background-color: #e0e0e0; } /* 계산에 사용된 요소 */
+.swapped { background-color: #ffcc80; } /* 행 교환된 요소 */
+.pivot-candidate { background-color: #c8e6c9; } /* 피벗 후보 요소 */
+td.empty { background-color: #fafafa; } /* 빈 요소 */
+
 button { 
   margin: 5px; 
   padding: 10px 16px; 
@@ -121,14 +123,14 @@ button:hover {
 <button onclick="goHome()" style="margin-bottom: 20px;">← Home</button>
 <h2>Step-by-Step LU Factorization + Solve Ax=b</h2>
 
-<!-- Main Screen -->
+<!-- 메인 화면 - 모드 선택 -->
 <div id="mainScreen" class="screen" style="display:block;">
   <button onclick="startScreen('LU')">LU Factorization Only</button>
   <button onclick="startScreen('Solve')">Solve Ax=b</button>
   <button onclick="startScreen('Pivoting')">LU with Pivoting</button>
 </div>
 
-<!-- LU Only Screen -->
+<!-- LU 분해 전용 화면 -->
 <div id="LUScreen" class="screen">
   <h3>LU Factorization Step-by-Step</h3>
   <label>N = <input type="number" id="matrixSizeLU" value="3" min="2" max="6"></label>
@@ -163,7 +165,7 @@ button:hover {
   <div id="descLU" class="desc"></div>
 </div>
 
-<!-- Solve Ax=b Screen -->
+<!-- 선형 시스템 풀이 화면 -->
 <div id="SolveScreen" class="screen">
   <h3>LU Factorization + Solve Ax=b</h3>
   <label>N = <input type="number" id="matrixSizeSolve" value="3" min="2" max="6"></label>
@@ -207,7 +209,7 @@ button:hover {
   <div id="descSolve" class="desc"></div>
 </div>
 
-<!-- Pivoting Screen -->
+<!-- 피벗팅 포함 LU 분해 화면 -->
 <div id="PivotingScreen" class="screen">
   <h3>LU Factorization with Partial Pivoting</h3>
   <label>N = <input type="number" id="matrixSizePivot" value="3" min="2" max="6"></label>
@@ -253,12 +255,13 @@ button:hover {
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.12.0/math.min.js"></script>
 <script>
+// 전역 변수 선언 - 알고리즘 상태 관리
 let N=3, A=[], L=[], U=[], b=[], y=[], x=[], P=[];
 let step=0, phase='LU', currentCol=0, currentRow=1;
-let pivotPhase = 'findPivot';
-let originalA = []; // 원본 행렬 저장용 변수 추가
+let pivotPhase = 'findPivot'; // 피벗팅 단계 관리: findPivot, swapRows, eliminate
+let originalA = []; // 원본 행렬 저장 (피벗팅 시 행 교환 후 원본 표시용)
 
-// --- 홈으로 가는 함수 ---
+// --- 홈 화면으로 이동하는 함수 ---
 function goHome(){
   document.getElementById("LUScreen").style.display = 'none';
   document.getElementById("SolveScreen").style.display = 'none';
@@ -266,7 +269,7 @@ function goHome(){
   document.getElementById("mainScreen").style.display = 'block';
 }
 
-// --- 유틸 함수 ---
+// --- 화면 전환 유틸리티 함수 ---
 function startScreen(opt){
   document.getElementById("mainScreen").style.display='none';
   document.getElementById("LUScreen").style.display='none';
@@ -282,18 +285,20 @@ function startScreen(opt){
   }
 }
 
+// --- 숫자 포맷팅 함수 ---
 function format(val){
   if(val === '' || val === null) return '';
   let num = Number(val);
-  if(Math.abs(num) < 1e-12) return 0;
-  return Number(num.toFixed(2));
+  if(Math.abs(num) < 1e-12) return 0; // 매우 작은 수는 0으로 처리
+  return Number(num.toFixed(2)); // 소수점 2자리까지 표시
 }
-// ==== create table
+
+// ==== 행렬/벡터 테이블 생성 함수 ====
 function createTable(matrix, highlight=[], pivot=[], used=[], swapped=[], candidates=[], isVector=false){
   let html="<table>";
   
   if (isVector) {
-    // 벡터인 경우 (1차원 배열)
+    // 벡터인 경우 (1차원 배열) - 세로로 표시
     for(let i=0;i<matrix.length;i++){
       html+="<tr>";
       let val = matrix[i];
@@ -314,6 +319,7 @@ function createTable(matrix, highlight=[], pivot=[], used=[], swapped=[], candid
         let val=matrix[i][j];
         let cls="empty";
         
+        // 요소 상태에 따른 색상 클래스 할당 (우선순위 중요)
         if(swapped.some(p=>p[0]===i && p[1]===j)) cls="swapped";
         else if(pivot.some(p=>p[0]===i && p[1]===j)) cls="pivot";
         else if(candidates.some(p=>p[0]===i && p[1]===j)) cls="pivot-candidate";
@@ -332,7 +338,7 @@ function createTable(matrix, highlight=[], pivot=[], used=[], swapped=[], candid
   return html;
 }
 
-// ================= Pivoting =================
+// ================= 피벗팅 포함 LU 분해 =================
 function generatePivot(){
   N=parseInt(document.getElementById("matrixSizePivot").value);
   initializePivot();
@@ -358,13 +364,14 @@ function generatePivot(){
     </div>`;
 }
 
+// 문제있는 행렬 생성 함수 (작은 피벗 값으로 수치적 불안정성演示)
 function generateProblematicMatrix(){
   N=parseInt(document.getElementById("matrixSizePivot").value);
   initializePivot();
   
   // 문제있는 행렬 생성 (작은 피벗 또는 0 피벗)
   if(N >= 2) {
-    U[0][0] = 0.001;
+    U[0][0] = 0.001; // 매우 작은 피벗 값
     U[0][1] = 2;
     U[1][0] = 1;
     U[1][1] = 1;
@@ -402,16 +409,17 @@ function generateProblematicMatrix(){
     Let's see how partial pivoting solves this issue!`;
 }
 
+// 피벗팅 LU 분해 초기화 함수
 function initializePivot(){
-  A=[]; L=[]; U=[]; P=[]; originalA=[]; // originalA 초기화 추가
+  A=[]; L=[]; U=[]; P=[]; originalA=[]; // 모든 행렬 초기화
   step=0; currentCol=0; currentRow=1; 
-  pivotPhase = 'findPivot';
+  pivotPhase = 'findPivot'; // 피벗팅 단계 초기화
   
   // P를 단위행렬로 초기화
   for(let i=0;i<N;i++){ 
     P[i]=[];
     for(let j=0;j<N;j++){
-      P[i][j] = (i===j ? 1 : 0);
+      P[i][j] = (i===j ? 1 : 0); // 대각선은 1, 나머지는 0
     }
   }
   
@@ -419,22 +427,25 @@ function initializePivot(){
   for(let i=0;i<N;i++){ 
     A[i]=[]; L[i]=[]; U[i]=[]; originalA[i]=[];
     for(let j=0;j<N;j++){
-      let val=Math.floor(Math.random()*10)+1;
+      let val=Math.floor(Math.random()*10)+1; // 1~10 사이 랜덤 값
       A[i][j]=val; U[i][j]=val; originalA[i][j]=val;
-      L[i][j]=(i===j?1:0);
+      L[i][j]=(i===j?1:0); // L은 단위행렬로 시작
     }
   }
 }
 
+// 피벗팅 화면 업데이트 함수
 function updateDisplayPivot(highlight=[], pivot=[], used=[], swapped=[], candidates=[]){
-  // A 대신 originalA를 사용하여 원본 행렬 표시
+  // A 대신 originalA를 사용하여 원본 행렬 표시 (행 교환 후에도 원본 유지)
   document.getElementById("matrixA_Pivot").innerHTML=createTable(originalA);
   document.getElementById("matrixP_Pivot").innerHTML=createTable(P, highlight, pivot, used, swapped, candidates);
   document.getElementById("matrixL_Pivot").innerHTML=createTable(L, highlight, pivot, used, swapped, candidates);
   document.getElementById("matrixU_Pivot").innerHTML=createTable(U, highlight, pivot, used, swapped, candidates);
 }
 
+// 피벗팅 LU 분해 단계별 실행 함수
 function nextStepPivot(){
+  // 모든 열 처리 완료 시 종료
   if(currentCol>=N-1){ 
     document.getElementById("descPivot").innerHTML=
       `<span class='title'>LU Factorization with Pivoting Completed!</span>
@@ -455,19 +466,22 @@ function nextStepPivot(){
     return; 
   }
   
+  // 피벗 찾기 단계
   if(pivotPhase === 'findPivot') {
     let maxRow = currentCol;
     let maxVal = Math.abs(U[currentCol][currentCol]);
     let candidates = [];
     
+    // 현재 열에서 가장 큰 절대값을 가진 행 찾기
     for(let i=currentCol+1; i<N; i++) {
-      candidates.push([i, currentCol]);
+      candidates.push([i, currentCol]); // 피벗 후보 목록에 추가
       if(Math.abs(U[i][currentCol]) > maxVal) {
         maxVal = Math.abs(U[i][currentCol]);
         maxRow = i;
       }
     }
     
+    // 최대값이 현재 행과 다르면 행 교환 필요
     if(maxRow !== currentCol) {
       pivotPhase = 'swapRows';
       updateDisplayPivot([], [[maxRow, currentCol]], [], [], candidates);
@@ -478,6 +492,7 @@ function nextStepPivot(){
         <strong>Current pivot candidate:</strong> U[${maxRow},${currentCol}] = ${format(U[maxRow][currentCol])}
         <div class="warning">Need to swap row ${currentCol} with row ${maxRow} for better numerical stability!</div>`;
     } else {
+      // 현재 행이 최대값이면 교환 없이 소거 단계로
       pivotPhase = 'eliminate';
       updateDisplayPivot([], [[currentCol, currentCol]], [], [], candidates);
       document.getElementById("descPivot").innerHTML=
@@ -488,8 +503,11 @@ function nextStepPivot(){
     }
     
   } else if(pivotPhase === 'swapRows') {
+    // 행 교환 단계
     let maxRow = currentCol;
     let maxVal = Math.abs(U[currentCol][currentCol]);
+    
+    // 다시 최대값 위치 확인 (일관성 유지)
     for(let i=currentCol+1; i<N; i++) {
       if(Math.abs(U[i][currentCol]) > maxVal) {
         maxVal = Math.abs(U[i][currentCol]);
@@ -497,21 +515,26 @@ function nextStepPivot(){
       }
     }
     
+    // 행 교환 수행
     if(maxRow !== currentCol) {
+      // U 행렬 행 교환
       let temp = U[currentCol];
       U[currentCol] = U[maxRow];
       U[maxRow] = temp;
       
+      // L 행렬의 이미 계산된 승수들 교환 (현재 열 이전까지)
       for(let j=0; j<currentCol; j++) {
         let tempL = L[currentCol][j];
         L[currentCol][j] = L[maxRow][j];
         L[maxRow][j] = tempL;
       }
       
+      // P 행렬 행 교환
       let tempP = P[currentCol];
       P[currentCol] = P[maxRow];
       P[maxRow] = tempP;
       
+      // 교환된 행 시각화용 데이터 준비
       let swapped = [];
       for(let j=0; j<N; j++) {
         swapped.push([currentCol, j]);
@@ -531,24 +554,27 @@ function nextStepPivot(){
         Updated permutation matrix P records this swap.`;
     }
     
-    pivotPhase = 'eliminate';
+    pivotPhase = 'eliminate'; // 소거 단계로 이동
     
   } else if(pivotPhase === 'eliminate') {
+    // 가우스 소거 수행 단계
     let pivotElement = U[currentCol][currentCol];
     let multiplier = U[currentRow][currentCol] / pivotElement;
     
-    let highlight = [[currentRow, currentCol]];
-    let pivot = [[currentCol, currentCol]];
-    let used = [];
+    let highlight = [[currentRow, currentCol]]; // 현재 업데이트 위치
+    let pivot = [[currentCol, currentCol]]; // 피벗 위치
+    let used = []; // 계산에 사용된 위치
     
+    // 현재 행 소거 수행
     for(let j=currentCol;j<N;j++){
       U[currentRow][j] = U[currentRow][j] - multiplier * U[currentCol][j];
-      highlight.push([currentRow, j]);
+      highlight.push([currentRow, j]); // 업데이트된 위치 표시
       if(j > currentCol) {
-        used.push([currentCol, j]);
+        used.push([currentCol, j]); // 사용된 U의 요소 표시
       }
     }
     
+    // 승수를 L 행렬에 저장
     L[currentRow][currentCol] = multiplier;
     
     updateDisplayPivot(highlight, pivot, used);
@@ -561,27 +587,30 @@ function nextStepPivot(){
       <strong>Update Row ${currentRow} of U:</strong>
       <div class="formula">U[${currentRow},j] = U[${currentRow},j] - ${format(multiplier)} × U[${currentCol},j]</div>`;
     
+    // 다음 행으로 이동
     currentRow++;
     if(currentRow>=N){ 
+      // 현재 열의 모든 행 처리 완료 → 다음 열로 이동
       currentCol++; 
       currentRow=currentCol+1; 
-      pivotPhase = 'findPivot';
+      pivotPhase = 'findPivot'; // 다음 열에서 다시 피벗 찾기
     }
   }
   
-  step++;
+  step++; // 전체 단계 카운트 증가
 }
 
-// ================= LU Only =================
+// ================= 기본 LU 분해 (피벗팅 없음) =================
 function generateLU(){
   N=parseInt(document.getElementById("matrixSizeLU").value);
   A=[]; L=[]; U=[]; step=0; currentCol=0; currentRow=1; phase='LU';
+  // 행렬 초기화
   for(let i=0;i<N;i++){ 
     A[i]=[]; L[i]=[]; U[i]=[];
     for(let j=0;j<N;j++){
       let val=Math.floor(Math.random()*10)+1;
-      A[i][j]=val; U[i][j]=val;
-      L[i][j]=(i===j?1:0);
+      A[i][j]=val; U[i][j]=val; // U는 A로 초기화
+      L[i][j]=(i===j?1:0); // L은 단위행렬로 초기화
     }
   }
   updateDisplayLU();
@@ -597,13 +626,16 @@ function generateLU(){
     We will perform Gaussian elimination to transform U into an upper triangular matrix while recording the multipliers in L.`;
 }
 
+// LU 분해 화면 업데이트 함수
 function updateDisplayLU(highlight=[], pivot=[], used=[]){
   document.getElementById("matrixA_LU").innerHTML=createTable(A);
   document.getElementById("matrixL_LU").innerHTML=createTable(L, highlight, pivot, used);
   document.getElementById("matrixU_LU").innerHTML=createTable(U, highlight, pivot, used);
 }
 
+// 기본 LU 분해 단계별 실행 함수
 function nextStepLU(){
+  // 모든 열 처리 완료 시 종료
   if(currentCol>=N-1){ 
     document.getElementById("descLU").innerHTML=
       `<span class='title'>LU Factorization Completed!</span>
@@ -618,21 +650,24 @@ function nextStepLU(){
     return; 
   }
   
+  // 현재 피벗 요소와 승수 계산
   let pivotElement = U[currentCol][currentCol];
   let multiplier = U[currentRow][currentCol] / pivotElement;
   
-  let highlight = [[currentRow, currentCol]];
-  let pivot = [[currentCol, currentCol]];
-  let used = [];
+  let highlight = [[currentRow, currentCol]]; // 현재 처리 위치
+  let pivot = [[currentCol, currentCol]]; // 피벗 위치
+  let used = []; // 계산에 사용된 위치
   
+  // 가우스 소거 수행
   for(let j=currentCol;j<N;j++){
     U[currentRow][j] = U[currentRow][j] - multiplier * U[currentCol][j];
     highlight.push([currentRow, j]);
     if(j > currentCol) {
-      used.push([currentCol, j]);
+      used.push([currentCol, j]); // 피벗 행에서 사용된 요소
     }
   }
   
+  // 승수를 L 행렬에 저장
   L[currentRow][currentCol] = multiplier;
   
   updateDisplayLU(highlight, pivot, used);
@@ -646,13 +681,16 @@ function nextStepLU(){
     <div class="formula">U[${currentRow},j] = U[${currentRow},j] - ${format(multiplier)} × U[${currentCol},j] for j = ${currentCol} to ${N-1}</div>
     This eliminates the element below the pivot in column ${currentCol}.`;
 
+  // 다음 행으로 이동
   currentRow++;
   if(currentRow>=N){ 
+    // 현재 열의 모든 행 처리 완료 → 다음 열로 이동
     currentCol++; 
     currentRow=currentCol+1; 
   }
 }
-// ================= Solve Ax=b =================
+
+// ================= 선형 시스템 Ax=b 풀이 =================
 function generateSolve(){
   N=parseInt(document.getElementById("matrixSizeSolve").value);
   A=[]; L=[]; U=[]; 
@@ -661,9 +699,10 @@ function generateSolve(){
   x=Array(N).fill(0);
   step=0; phase='LU'; currentCol=0; currentRow=1;
   
+  // 행렬과 벡터 초기화
   for(let i=0;i<N;i++){ 
     A[i]=[]; L[i]=[]; U[i]=[]; 
-    b[i]=Math.floor(Math.random()*10)+1;
+    b[i]=Math.floor(Math.random()*10)+1; // 벡터 b 랜덤 생성
     
     for(let j=0;j<N;j++){
       let val=Math.floor(Math.random()*10)+1;
@@ -689,6 +728,7 @@ function generateSolve(){
     First, we need to factor A into L and U.`;
 }
 
+// 선형 시스템 풀이 화면 업데이트 함수
 function updateDisplaySolve(highlight=[], pivot=[], used=[]){
   document.getElementById("matrixA_Solve").innerHTML=createTable(A);
   document.getElementById("matrixL_Solve").innerHTML=createTable(L, highlight, pivot, used);
@@ -700,9 +740,12 @@ function updateDisplaySolve(highlight=[], pivot=[], used=[]){
   document.getElementById("vectorX_Solve").innerHTML=createTable(x, highlight, [], [], false, [], true);
 }
 
+// 선형 시스템 풀이 단계별 실행 함수
 function nextStepSolve(){
+  // LU 분해 단계
   if(phase==='LU'){
     if(currentCol>=N-1){ 
+      // LU 분해 완료 → 순방향 대입 단계로 이동
       phase='Forward'; 
       step=0; 
       document.getElementById("descSolve").innerHTML=
@@ -715,6 +758,7 @@ function nextStepSolve(){
       return; 
     }
     
+    // LU 분해 단계 수행 (피벗팅 없는 버전과 동일)
     let pivotElement = U[currentCol][currentCol];
     let multiplier = U[currentRow][currentCol] / pivotElement;
     
@@ -748,8 +792,10 @@ function nextStepSolve(){
       currentRow=currentCol+1; 
     }
   }
+  // 순방향 대입 단계: Ly = b 풀이
   else if(phase==='Forward'){
     if(step>=N){ 
+      // 순방향 대입 완료 → 역방향 대입 단계로 이동
       phase='Backward'; 
       step=0; 
       document.getElementById("descSolve").innerHTML=
@@ -764,17 +810,19 @@ function nextStepSolve(){
     
     let sum=0;
     let used = [];
+    // 이전 y 값들과의 선형 조합 계산
     for(let j=0;j<step;j++) {
       sum += L[step][j] * y[j];
-      used.push([step, j]);
+      used.push([step, j]); // 사용된 L의 요소 표시
     }
     
+    // 현재 y 값 계산
     y[step] = (b[step] - sum) / L[step][step];
     
     // 벡터 y의 현재 요소를 하이라이트 (벡터는 [i, 0] 형식)
     let vectorHighlight = [];
     for(let i=0; i<=step; i++) {
-      vectorHighlight.push([i, 0]);
+      vectorHighlight.push([i, 0]); // 계산 완료된 y 요소들 하이라이트
     }
     
     updateDisplaySolve(vectorHighlight, [], used);
@@ -789,8 +837,10 @@ function nextStepSolve(){
     
     step++;
   }
+  // 역방향 대입 단계: Ux = y 풀이
   else if(phase==='Backward'){
     if(step>=N){ 
+      // 모든 x 값 계산 완료
       document.getElementById("descSolve").innerHTML=
         `<span class='title'>Solution Complete!</span>
         We have successfully solved the system:
@@ -801,21 +851,24 @@ function nextStepSolve(){
       return; 
     }
     
+    // 아래에서 위로 계산 (역방향)
     let i = N-1-step;
     let sum = 0;
     let used = [];
     
+    // 이미 계산된 x 값들과의 선형 조합 계산
     for(let j=i+1;j<N;j++) {
       sum += U[i][j] * x[j];
-      used.push([i, j]);
+      used.push([i, j]); // 사용된 U의 요소 표시
     }
     
+    // 현재 x 값 계산
     x[i] = (y[i] - sum) / U[i][i];
     
     // 벡터 x의 현재 요소를 하이라이트 (벡터는 [i, 0] 형식)
     let vectorHighlight = [];
     for(let k=N-1; k>=i; k--) {
-      vectorHighlight.push([k, 0]);
+      vectorHighlight.push([k, 0]); // 계산 완료된 x 요소들 하이라이트
     }
     
     updateDisplaySolve(vectorHighlight, [[i, i]], used);
