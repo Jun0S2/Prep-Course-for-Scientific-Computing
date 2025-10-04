@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Matrix Decomposition Visualizer</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Matrix Decomposition Visualizer</h1>
+        
+        <div class="decomposition-grid">
+            <div class="decomposition-card" onclick="loadDecomposition('lu')">
+                <h3>LU Decomposition</h3>
+                <p>A = L × U<br>Lower × Upper Triangular</p>
+            </div>
+            
+            <div class="decomposition-card" onclick="loadDecomposition('ldu')">
+                <h3>LDU Decomposition</h3>
+                <p>A = L × D × U<br>With Diagonal Matrix</p>
+            </div>
+            
+            <div class="decomposition-card" onclick="loadDecomposition('qr')">
+                <h3>QR Decomposition</h3>
+                <p>A = Q × R<br>Orthogonal × Upper Triangular</p>
+            </div>
+            
+            <div class="decomposition-card" onclick="loadDecomposition('svd')">
+                <h3>SVD</h3>
+                <p>A = U × Σ × Vᵀ<br>Singular Value Decomposition</p>
+            </div>
+            
+            <div class="decomposition-card" onclick="loadDecomposition('spectral')">
+                <h3>Spectral Decomposition</h3>
+                <p>A = Q × Λ × Qᵀ<br>Eigen Decomposition</p>
+            </div>
+        </div>
+        
+        <div id="decomposition-container"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.12.0/math.min.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
