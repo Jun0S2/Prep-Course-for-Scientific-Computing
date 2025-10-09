@@ -16,3 +16,9 @@ matrix-decompositions/
 └── lib/
     └── mathjs.js           # CDN 사용
 ```
+
+# Backend
+
+cd python-backend
+pip install -r requirements.txt
+python app.py

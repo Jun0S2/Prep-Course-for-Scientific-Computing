@@ -3,7 +3,9 @@ class SVDDecomposition {
         M: 3, N: 3,
         A: [], U: [], Sigma: [], VT: [],
         step: 0, phase: 'init',
-        currentSingularValue: 0
+        currentSingularValue: 0,
+        pythonSteps: [],  // 파이썬에서 계산한 단계들
+        currentPythonStep: 0
     };
 
     static getHTML() {
@@ -14,6 +16,7 @@ class SVDDecomposition {
                 <label>Columns: <input type="number" id="svd-cols" value="3" min="2" max="6"></label>
                 <button class="btn" onclick="SVDDecomposition.generate()">Generate Matrix</button>
                 <button class="btn" onclick="SVDDecomposition.nextStep()">Next Step</button>
+                <button class="btn" onclick="SVDDecomposition.computeWithPython()">Compute with Python</button>
                 <button class="btn btn-secondary" onclick="SVDDecomposition.reset()">Reset</button>
             </div>
 
@@ -45,12 +48,111 @@ class SVDDecomposition {
             </div>
 
             <div class="description" id="svd-description"></div>
+            
+            <!-- Python 계산 결과 표시 -->
+            <div id="python-results" style="display: none;">
+                <h3>Python SVD Results</h3>
+                <div id="python-steps"></div>
+            </div>
         `;
     }
-
-    static initialize() {
-        this.generate();
+// 파이썬 백엔드로 SVD 계산
+static async computeWithPython() {
+    try {
+        this.updateDescription('<p>🔄 Computing SVD with Python (Scipy)...</p>');
+        
+        // 직접 계산 API 사용
+        const response = await fetch('http://localhost:5000/api/svd/direct', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                matrix: this.state.A
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // 결과를 state에 반영
+            this.state.U = result.U;
+            this.state.Sigma = result.Sigma;
+            this.state.VT = result.Vt;
+            
+            this.updateDisplay();
+            
+            this.updateDescription(`
+                <h3>Python SVD Computation Complete!</h3>
+                <div class="matrix-comparison">
+                    <div class="matrix-pair">
+                        <h4>Original Matrix A:</h4>
+                        ${MatrixUtils.createTable(result.original)}
+                    </div>
+                    <div class="matrix-pair">
+                        <h4>Reconstructed A (U×Σ×Vᵀ):</h4>
+                        ${MatrixUtils.createTable(result.reconstructed)}
+                    </div>
+                </div>
+                <div class="info-box">
+                    <strong>Singular Values:</strong> [${result.singular_values.map(v => v.toFixed(4)).join(', ')}]
+                </div>
+                <div class="info-box success">
+                    <strong>Verification:</strong> Reconstruction successful! 
+                    The original matrix is accurately reconstructed from U, Σ, and Vᵀ.
+                </div>
+            `);
+        } else {
+            this.updateDescription(`<p class="error">Error: ${result.error}</p>`);
+        }
+        
+    } catch (error) {
+        this.updateDescription(`
+            <p class="error">Cannot connect to Python backend: ${error}</p>
+            <div class="info-box">
+                <strong>To run Python backend:</strong>
+                <pre>cd python-backend
+pip install -r requirements.txt
+python app.py</pre>
+            </div>
+        `);
     }
+}
+
+// 단계별 보기는 이렇게 수정
+static showPythonStep(stepIndex) {
+    if (!this.state.pythonSteps[stepIndex]) return;
+    
+    const step = this.state.pythonSteps[stepIndex];
+    let html = `<div class="python-step">
+        <h4>Step ${step.step}: ${step.title}</h4>
+        <p>${step.description}</p>`;
+    
+    if (step.Sigma) {  // 최종 결과 단계
+        html += `<h5>U Matrix:</h5>${this.createPythonMatrixTable(step.U)}`;
+        html += `<h5>Σ Matrix:</h5>${this.createPythonMatrixTable(step.Sigma)}`;
+        html += `<h5>Vᵀ Matrix:</h5>${this.createPythonMatrixTable(step.Vt)}`;
+        html += `<h5>Singular Values:</h5>${this.createPythonVectorTable(step.singular_values)}`;
+        
+        // 오차 계산
+        const error = this.calculateReconstructionError(step.original_matrix, step.reconstructed);
+        html += `<h5>Reconstruction Error: ${error.toFixed(8)}</h5>`;
+    }
+    // ... 다른 단계들
+    html += `</div>`;
+    
+    document.getElementById('python-steps').innerHTML = html;
+}
+
+static calculateReconstructionError(original, reconstructed) {
+    let totalError = 0;
+    for (let i = 0; i < original.length; i++) {
+        for (let j = 0; j < original[i].length; j++) {
+            totalError += Math.abs(original[i][j] - reconstructed[i][j]);
+        }
+    }
+    return totalError;
+}
 
     static generate() {
         this.state.M = parseInt(document.getElementById('svd-rows').value);
